@@ -13,6 +13,23 @@ from torch.utils.tensorboard import SummaryWriter
 os.environ["KMP_DUPLICATE_LIB_OK"]  =  "TRUE"
 writer = SummaryWriter('runs/train_heat_V2_0')
 
+def ohkm(loss, top_k):
+    """Online Hard Keypoint Mining.
+    Args:
+    - loss (torch.Tensor): tensor of shape (batch_size, num_joints) that represents the loss of each keypoint
+    - top_k (int): number of keypoints to consider
+    Returns:
+    - torch.Tensor: tensor of shape (batch_size,) containing the mean loss of the hardest keypoints
+    """
+    ohkm_loss = 0.
+    for i in range(loss.size()[0]):
+        sub_loss = loss[i]
+        topk_val, topk_id = torch.topk(sub_loss, k=top_k, dim=0, sorted=False)
+        tmp_loss = torch.gather(sub_loss, 0, topk_id)
+        ohkm_loss += torch.mean(tmp_loss)
+    ohkm_loss /= loss.size()[0]
+    return ohkm_loss
+
 # 展示模型預測結果
 # def show_predictions(images, heatmaps, predictions):
 #     images = images.cpu().numpy()
@@ -215,7 +232,7 @@ train_loader, val_loader = create_data_loaders(train_dataset, val_dataset, batch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = HeatmapHandJointDetector().to(device)
 try:
-    model.load_state_dict(torch.load('heatV2_model_epoch_1.pth')) #讀取訓練檔
+    model.load_state_dict(torch.load('')) #讀取訓練檔
     print(f"using 'heatV2_model_epoch_1.pth' to train model ")
     pretrain = 1
 except:
@@ -228,6 +245,9 @@ import torch.nn as nn
 
 upsample = nn.Upsample(size=(320, 320), mode='bilinear', align_corners=True)
 
+num_joints = 42
+top_k = num_joints // 2 
+criterion = nn.MSELoss(reduction='none')
 
 num_epochs = 10
 for epoch in range(num_epochs):
@@ -240,22 +260,33 @@ for epoch in range(num_epochs):
         outputs = model(images)
         # outputs = upsample(outputs)
         # print("Model outputs shape:", outputs.shape)
+        
+        # print("Outputs shape:", outputs.shape)
+        # print("Heatmaps shape:", heatmaps.shape)
+        # print("Loss shape:", criterion(outputs, heatmaps).shape)
+
+        #計算關節點個別Loss
+        individual_losses = criterion(outputs, heatmaps).mean(dim=(2,3))
+        #OHKM
+        loss = ohkm(individual_losses, top_k)
         # 每十批次，視覺化一次預測
-        if i % 10000 == 0:
+        if i % 1000 == 0:
             # print(heatmaps)
             # print(outputs)
             show_predictions(images, heatmaps, outputs)
             
 
-        loss = criterion(outputs, heatmaps)
-        print(f"loss:{loss}")
-        writer.add_scalar('Loss', loss, i)
+        print(f"loss:{loss.item()}")  # 使用.item()获得损失的具体数值
+        writer.add_scalar('Loss', loss.item(), i)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-    writer.add_scalar('Loss_epoch', loss, epoch)    
+
+    writer.add_scalar('Loss_epoch', loss.item(), epoch)    
     if pretrain == 1:
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}')
-        torch.save(model.state_dict(), f'PRE_heatV2_model_epoch_{epoch+1}.pth')
-    torch.save(model.state_dict(), f'heatV2_model_epoch_{epoch+1}.pth')
-    writer.close()
+        torch.save(model.state_dict(), f'PRE_heatV3_model_epoch_{epoch+1}.pth')
+    
+    torch.save(model.state_dict(), f'heatV3_model_epoch_{epoch+1}.pth')
+
+writer.close()
