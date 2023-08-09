@@ -240,12 +240,29 @@ for epoch in range(num_epochs):
         outputs = model(images)
         # outputs = upsample(outputs)
         # print("Model outputs shape:", outputs.shape)
+<<<<<<< Updated upstream
+=======
+        
+        print("Outputs shape:", outputs.shape)
+        print("Heatmaps shape:", heatmaps.shape)
+        print("Loss shape:", criterion(outputs, heatmaps).shape)
+
+        #計算關節點個別Loss
+        individual_losses = criterion(outputs, heatmaps).mean(dim=(2,3))
+        #OHKM
+        loss = ohkm(individual_losses, top_k)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+>>>>>>> Stashed changes
         # 每十批次，視覺化一次預測
         if i % 10000 == 0:
             # print(heatmaps)
             # print(outputs)
             show_predictions(images, heatmaps, outputs)
             
+<<<<<<< Updated upstream
 
         loss = criterion(outputs, heatmaps)
         print(f"loss:{loss}")
@@ -254,6 +271,18 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
     writer.add_scalar('Loss_epoch', loss, epoch)    
+=======
+        print(f"loss:{loss.item()}")  # 使用.item()获得损失的具体数值
+        writer.add_scalar('Loss', loss.item(), i)
+    # Validation or evaluation
+    model.eval()
+    with torch.no_grad():
+        # Your validation or evaluation code
+        pass
+
+
+    writer.add_scalar('Loss_epoch', loss.item(), epoch)    
+>>>>>>> Stashed changes
     if pretrain == 1:
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}')
         torch.save(model.state_dict(), f'PRE_heatV2_model_epoch_{epoch+1}.pth')
